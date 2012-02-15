@@ -80,7 +80,7 @@ sub run {
   my ($h, $res) = verify_app(
     config_app(
       create_app(
-        {BUILDPACK_URL => 'http://github.com/tempire/perloku.git'}, $opt
+        {BUILDPACK_URL => 'http://github.com/tempire/perloku.git'} => $opt
       )
     )
   );
@@ -91,7 +91,9 @@ sub run {
   print "Uploading $class to $res->{name}...";
   push_repo(
     fill_repo(
-      create_repo($res, $self->app->home->list_files, $home_dir => $self->tmpdir)
+      create_repo(
+        $res => $self->app->home->list_files => $home_dir => $self->tmpdir
+      )
     )
   );
   say 'done.';
@@ -99,21 +101,22 @@ sub run {
 
 # T :: (A, $home_dir, $tmp_dir) -> (A, $r)
 sub create_repo {
-  my ($tmp_dir, $home_dir) = map {pop} 1..2;
+  my ($tmp_dir, $home_dir) = map {pop} 1 .. 2;
 
   my $git_dir = $tmp_dir . '/mojo_deploy_git_' . int rand 1000;
 
   Git::Repository->run(init => $git_dir);
 
-  return @_, Git::Repository->new(
+  return @_,
+    Git::Repository->new(
     work_tree => $home_dir,
     git_dir   => $git_dir . '/.git'
-  );
+    );
 }
 
 # T :: (A, $files, $r) -> (A, $r)
 sub fill_repo {
-  my ($r, $files) = map {pop} 1..2;
+  my ($r, $files) = map {pop} 1 .. 2;
 
   git($r, add => @$files);
   git($r, commit => '-m' => 'Initial Commit');
@@ -123,7 +126,7 @@ sub fill_repo {
 
 # T :: (A, $name, $res, $r) -> (A, $r)
 sub push_repo {
-  my ($r, $res, $name) = map {pop} 1..3;
+  my ($r, $res, $name) = map {pop} 1 .. 3;
 
   git($r, remote => add => heroku => $res->{git_url});
   git($r, push => heroku => 'master');
@@ -153,7 +156,7 @@ sub create_app {
 
 # T :: (A, $config, $h, $res) -> (A, $h, $res)
 sub config_app {
-  my ($res, $h, $config) = map {pop} 1..3;
+  my ($res, $h, $config) = map {pop} 1 .. 3;
 
   die "configuration failed for app $res->{name}"
     if !$h->add_config(name => $res->{name}, %$config);
@@ -163,7 +166,7 @@ sub config_app {
 
 # T :: (A, $h, $res) -> (A, $h, $res)
 sub verify_app {
-  my ($res, $h) = map {pop} 1..2;
+  my ($res, $h) = map {pop} 1 .. 2;
 
   for (0 .. 5) {
     last if $h->app_created(name => $res->{name});
