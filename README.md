@@ -2,8 +2,9 @@
 
 Two files must be generated before app can be deployed to Heroku:
 
-`script/my_app generate makefile
-script/my_app generate heroku`
+`script/my_app generate makefile` # Makefile.PL
+
+`script/my_app generate heroku`   # Buildpack detection script
 
 # Usage
 <pre>
