@@ -1,15 +1,22 @@
+# Requirements
+
+Two files must be generated before app can be deployed to Heroku:
+
+`script/my_app generate makefile
+script/my_app generate heroku`
+
 # Usage
 <pre>
 script/my_app deploy heroku [OPTIONS]
 
   # Create new app with randomly selected name and deploy
-  script/my_app deploy heroku -c
+  script/my_app deploy heroku --create --api-key ...
 
   # Create new app with specified name and deploy
-  script/my_app deploy heroku -c -n happy-cloud-1234
+  script/my_app deploy heroku --create --name happy-cloud-1234
 
   # Deploy to existing app
-  script/my_app deploy heroku -n happy-cloud-1234
+  script/my_app deploy heroku --name happy-cloud-1234
 
 These options are available:
   -n, --appname &lt;name&gt;      Specify app for deployment
