@@ -10,6 +10,8 @@ use Mojo::UserAgent;
 use Mojo::IOLoop;
 use File::Spec;
 
+$|++;
+
 has tmpdir => sub { $ENV{MOJO_TMPDIR} || File::Spec->tmpdir };
 has ua => sub { Mojo::UserAgent->new->ioloop(Mojo::IOLoop->singleton) };
 has description => "Deploy Mojolicious app.\n";
@@ -94,7 +96,7 @@ sub run {
 
 # T :: (A, $home_dir, $tmp_dir) -> (A, $r)
 sub create_repo {
-  my ($tmp_dir, $home_dir) = (pop, pop);
+  my ($tmp_dir, $home_dir) = map {pop} 1..2;
 
   my $git_dir = $tmp_dir . '/mojo_deploy_git_' . int rand 1000;
 
@@ -108,7 +110,7 @@ sub create_repo {
 
 # T :: (A, $files, $r) -> (A, $r)
 sub fill_repo {
-  my ($r, $files) = (pop, pop);
+  my ($r, $files) = map {pop} 1..2;
 
   git($r, add => @$files);
   git($r, commit => '-m' => 'Initial Commit');
@@ -118,7 +120,7 @@ sub fill_repo {
 
 # T :: (A, $name, $res, $r) -> (A, $r)
 sub push_repo {
-  my ($r, $res, $name) = (pop, pop, pop);
+  my ($r, $res, $name) = map {pop} 1..3;
 
   git($r, remote => add => heroku => $res->{git_url});
   git($r, push => heroku => 'master');
@@ -127,7 +129,7 @@ sub push_repo {
 }
 
 sub git {
-  return 1 if eval { shift->run(@_) };
+  return 1 if shift->run(@_);
 }
 
 sub is_repo {
@@ -148,7 +150,7 @@ sub create_app {
 
 # T :: (A, $config, $h, $res) -> (A, $h, $res)
 sub config_app {
-  my ($res, $h, $config) = (pop, pop, pop);
+  my ($res, $h, $config) = map {pop} 1..3;
 
   die "configuration failed for app $res->{name}"
     if !$h->add_config(name => $res->{name}, %$config);
@@ -158,7 +160,7 @@ sub config_app {
 
 # T :: (A, $h, $res) -> (A, $h, $res)
 sub verify_app {
-  my ($res, $h) = (pop, pop);
+  my ($res, $h) = map {pop} 1..2;
 
   for (0 .. 5) {
     last if $h->app_created(name => $res->{name});
