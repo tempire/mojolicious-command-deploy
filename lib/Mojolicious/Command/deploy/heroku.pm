@@ -1,7 +1,6 @@
 package Mojolicious::Command::deploy::heroku;
 use Mojo::Base 'Mojo::Command';
 
-use File::Basename 'basename';
 use Getopt::Long qw/GetOptions :config no_auto_abbrev no_ignore_case/;
 use Net::Heroku;
 use Git::Repository;
@@ -14,7 +13,7 @@ use File::Spec;
 has tmpdir => sub { $ENV{MOJO_TMPDIR} || File::Spec->tmpdir };
 has ua => sub { Mojo::UserAgent->new->ioloop(Mojo::IOLoop->singleton) };
 has description => "Deploy Mojolicious app.\n";
-has ['opt'];
+has opt         => sub { {} };
 has usage       => <<"EOF";
 usage: $0 deploy heroku [OPTIONS]
 
@@ -39,105 +38,137 @@ sub opt_spec {
   my $self = shift;
   my $opt  = {};
 
-  local @ARGV = @_;
-  GetOptions(
-    "n|appname" => sub { $opt->{name}    = $_[1] },
-    "a|api-key" => sub { $opt->{api_key} = $_[1] },
-    "c|create"  => sub { $opt->{create}  = $_[1] },
-    "v|verbose" => sub { $opt->{verbose} = $_[1] },
-    "h|help"    => sub { $opt->{help}    = $_[1] },
-  );
-
-  return $opt;
+  return $opt
+    if GetOptions(
+    "appname|n=s" => sub { $opt->{name}    = pop },
+    "api-key|a=s" => sub { $opt->{api_key} = pop },
+    "create|c"    => sub { $opt->{create}  = pop },
+    );
 }
 
 sub validate {
   my $self = shift;
   my $opt  = shift;
 
-  return "\nError: App name required\n" if !defined $opt->{create} and !defined $opt->{name};
+  return 1 if defined $opt->{create} or defined $opt->{name};
 }
 
 sub run {
-    my $self  = shift;
-    my $class = $ENV{MOJO_APP};
+  my $self        = shift;
+  my $class       = $ENV{MOJO_APP};
+  my $path        = $self->class_to_path($class);
+  my $script_name = $self->class_to_file($class);
 
-    my $path        = $self->class_to_path($class);
-    my $script_name = $self->class_to_file($class);
+  # App home dir
+  $self->ua->app($class);
+  my $home_dir = $self->ua->app->home->to_string;
 
-    # Push to heroku app
+  # Options
+  my $opt = $self->opt_spec(@_);
 
-    # Options
-    my $opt = $self->opt_spec(@_);
+  # Validate
+  die $self->usage if !$self->validate($opt);
 
-    # Validate
-    die $self->usage if $self->validate($opt);
+  # Create
+  print "Creating Heroku app...";
 
-    print "Creating Heroku app...";
-    my $h = Net::Heroku->new(api_key => $opt->{api_key});
-    my $res = $h->create;
-    do { sleep 1 } while (!$h->app_created(name => $res->{name}));
+  my ($h, $res) = verify_app(
+    config_app(
+      create_app(
+        {BUILDPACK_URL => 'http://github.com/tempire/perloku.git'}, $opt
+      )
+    )
+  );
 
-    $h->add_config(
-      name          => $res->{name},
-      BUILDPACK_URL => 'http://github.com/tempire/perloku.git',
-    );
-    print '...';
+  say $res->{name};
 
-#$h->add_key(key => 'ssh-dss AAAAB3NzaC1kc3MAAACBAONzl+UOQhOFZBw6vIuoDKTOzUeGPJVK+yYlVTco0HbF/YwpIQ4TewrAQoTcZ9Q3bdIMN1ZBBpc4tAYDsAUiuDdhciyZ4E8O30fjAWDRzf7hhv/T9Lmtt8ttzI0vpuPslqdfHLgUTY+FKEQfgF4I/PsWb1P2HQOOhQnid/HoKWcXAAAAFQClEvS8P/iqVabeB/NL4TzUsvyPswAAAIBnc1aLB/zqkmhQpWFbUqh6v9xSnkqcTazA/E1Bhjzppq96SuZ4mNvuN3ZGsVj8Bfz/ZvWPUonBFqU8/lAJXjvIc8tN3EvbGQkks03s/Iav4OWN6hovfOLwqEK7yfeo73bTEkZ0BjqGlGuCeQrIJle4Fz4MHPCaNtsWQ3BBeCIJ/AAAAIEAtBm6wHK9EJnmNFec1eqGW3E/1/WDZ76xgBO07PKodponbn+o50LB6obOyMpJ92pvbZLOoVooSXZnRln6VqbUtE4yJoBk2gb4HVhF40MCYg7ed2sFoH2ofoFfpYXl++TeUv2KuKeWhUzVj9rnKbcn5lvNTlpoFfPoarwlrdJsp4s= glen@Glen-Hinkles-MacBook-Pro.local');
-
-    say "$res->{name}";
-
-    # Home dir
-    $self->ua->app($class);
-    my $home_dir = $self->ua->app->home->to_string;
-
-    my $r = $self->create_repo($home_dir);
-
-    # Add files to repo
-    say "add:" . $self->git($r, add => @{$self->app->home->list_files});
-    say "commit:" . $self->git($r, commit => '-m' => 'Initial Commit');
-
-    # Add remote
-    $self->git($r, remote => add => heroku => $res->{git_url});
-
-    # Push app to heroku
-    $self->git($r, push => heroku => 'master');
-
-    # Error
-    #unless ($tx->success) {
-    #  my $code = $tx->res->code || '';
-    #  my $message = $tx->error;
-    #  if    ($code eq '401') { $message = 'Wrong username or password.' }
-    #  elsif ($code eq '409') { $message = 'File already exists on CPAN.' }
-    #  die qq/Problem uploading file "$file". ($message)\n/;
-    #}
-    say 'Upload sucessful!';
+  # Upload
+  print "Uploading $class to $res->{name}...";
+  push_repo(
+    fill_repo(
+      create_repo($res, $self->app->home->list_files, $home_dir => $self->tmpdir)
+    )
+  );
+  say 'done.';
 }
 
+# T :: (A, $home_dir, $tmp_dir) -> (A, $r)
 sub create_repo {
-    my $self     = shift;
-    my $home_dir = shift;
+  my ($tmp_dir, $home_dir) = (pop, pop);
 
-    my $git_dir = $self->tmpdir . '/mojo_deploy_git_' . int rand 1000;
+  my $git_dir = $tmp_dir . '/mojo_deploy_git_' . int rand 1000;
 
-    Git::Repository->run(init => $git_dir);
-    return Git::Repository->new(
-      work_tree => $home_dir,
-      git_dir   => $git_dir . '/.git'
-    );
+  Git::Repository->run(init => $git_dir);
+
+  return @_, Git::Repository->new(
+    work_tree => $home_dir,
+    git_dir   => $git_dir . '/.git'
+  );
+}
+
+# T :: (A, $files, $r) -> (A, $r)
+sub fill_repo {
+  my ($r, $files) = (pop, pop);
+
+  git($r, add => @$files);
+  git($r, commit => '-m' => 'Initial Commit');
+
+  return @_, $r;
+}
+
+# T :: (A, $name, $res, $r) -> (A, $r)
+sub push_repo {
+  my ($r, $res, $name) = (pop, pop, pop);
+
+  git($r, remote => add => heroku => $res->{git_url});
+  git($r, push => heroku => 'master');
+
+  return @_, $r;
 }
 
 sub git {
-    my $self = shift;
-    my $r    = shift;
-
-    return 1 if eval { $r->run(@_) };
+  return 1 if eval { shift->run(@_) };
 }
 
 sub is_repo {
-    return eval { Git::Repository->new(git_dir => pop . '/.git') };
+  return eval { Git::Repository->new(git_dir => pop . '/.git') };
 }
+
+# T :: (A, $config, $h, $res) -> (A, $h, $res)
+sub create_app {
+  my $opt = pop;
+
+  my $h = Net::Heroku->new(api_key => $opt->{api_key});
+  my $res = $h->create(name => $opt->{name});
+
+  die "create failed for $opt->{name}" if !$res;
+
+  return @_, $h, $res;
+}
+
+# T :: (A, $config, $h, $res) -> (A, $h, $res)
+sub config_app {
+  my ($res, $h, $config) = (pop, pop, pop);
+
+  die "configuration failed for app $res->{name}"
+    if !$h->add_config(name => $res->{name}, %$config);
+
+  return @_, $h, $res;
+}
+
+# T :: (A, $h, $res) -> (A, $h, $res)
+sub verify_app {
+  my ($res, $h) = (pop, pop);
+
+  for (0 .. 5) {
+    last if $h->app_created(name => $res->{name});
+    sleep 1;
+    print '.';
+  }
+
+  return @_, $h, $res;
+}
+
 
 1;
 

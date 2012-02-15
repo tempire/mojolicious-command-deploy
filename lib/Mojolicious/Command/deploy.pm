@@ -16,6 +16,7 @@ has namespaces =>
 has usage => "usage: $0 deploy DEPLOYMENT [OPTIONS]\n";
 
 1;
+
 __END__
 
 =head1 NAME
