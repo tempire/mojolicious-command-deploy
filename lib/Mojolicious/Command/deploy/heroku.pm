@@ -3,8 +3,8 @@ use Mojo::Base 'Mojo::Command';
 
 # Developer's note:
 #   Core of functionality uses concatenative style.
-#   Type signatures provides, and will make sense in light of:
-#   See http://evincarofautumn.blogspot.com/2012/02/why-concatenative-programming-matters.html
+#   Type signatures provided, and will make sense in light of:
+#   http://evincarofautumn.blogspot.com/2012/02/why-concatenative-programming-matters.html
 
 use Getopt::Long qw/GetOptions :config no_auto_abbrev no_ignore_case/;
 use Net::Heroku;
