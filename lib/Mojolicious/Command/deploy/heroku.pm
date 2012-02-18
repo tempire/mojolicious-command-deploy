@@ -2,24 +2,25 @@ package Mojolicious::Command::deploy::heroku;
 use Mojo::Base 'Mojo::Command';
 
 # Developer's note:
-#   Core of functionality uses concatenative style.
-#   Type signatures provided, and will make sense in light of:
+#   Experiment using concatenative style.
+#   Type signatures provided, and may make sense in light of:
 #   http://evincarofautumn.blogspot.com/2012/02/why-concatenative-programming-matters.html
 
 use Getopt::Long qw/GetOptions :config no_auto_abbrev no_ignore_case/;
 use Net::Heroku;
 use Git::Repository;
-use Data::Dumper;
-use Devel::Dwarn;
 use Mojo::UserAgent;
 use Mojo::IOLoop;
 use File::Spec;
+use File::Slurp 'slurp';
 
 has tmpdir => sub { $ENV{MOJO_TMPDIR} || File::Spec->tmpdir };
 has ua => sub { Mojo::UserAgent->new->ioloop(Mojo::IOLoop->singleton) };
-has description => "Deploy Mojolicious app.\n";
-has opt         => sub { {} };
-has usage       => <<"EOF";
+has description      => "Deploy Mojolicious app.\n";
+has opt              => sub { {} };
+has credentials_file => sub {"$ENV{HOME}/.heroku/credentials"};
+has usage            => <<"EOF";
+
 usage: $0 deploy heroku [OPTIONS]
 
   # Create new app with randomly selected name and deploy
@@ -55,14 +56,15 @@ sub validate {
   my $self = shift;
   my $opt  = shift;
 
-  return 1 if defined $opt->{create} or defined $opt->{name};
+  return if !defined $opt->{create} and !defined $opt->{name};
+  return if !defined $opt->{api_key};
+
+  return 1;
 }
 
 sub run {
-  my $self        = shift;
-  my $class       = $ENV{MOJO_APP};
-  my $path        = $self->class_to_path($class);
-  my $script_name = $self->class_to_file($class);
+  my $self  = shift;
+  my $class = $ENV{MOJO_APP};
 
   # App home dir
   $self->ua->app($class);
@@ -71,16 +73,20 @@ sub run {
   # Options
   my $opt = $self->opt_spec(@_);
 
+  $opt->{api_key} //= $self->api_key;
+
   # Validate
   die $self->usage if !$self->validate($opt);
 
   # Create
   print "Creating Heroku app...";
 
-  my ($h, $res) = verify_app(
+  my $h = Net::Heroku->new(api_key => $opt->{api_key});
+
+  my ($res) = verify_app(
     config_app(
-      create_app(
-        {BUILDPACK_URL => 'http://github.com/tempire/perloku.git'} => $opt
+      create_or_get_app(
+        {BUILDPACK_URL => 'http://github.com/tempire/perloku.git'}, $opt, $h
       )
     )
   );
@@ -92,11 +98,20 @@ sub run {
   push_repo(
     fill_repo(
       create_repo(
-        $res => $self->app->home->list_files => $home_dir => $self->tmpdir
+        $res, $self->app->home->list_files,
+        $home_dir, $self->tmpdir
       )
     )
   );
   say 'done.';
+}
+
+sub api_key {
+  my $self = shift;
+  return if !-T $self->credentials_file;
+  my $api_key = +(slurp $self->credentials_file)[-1];
+  chomp $api_key;
+  return $api_key;
 }
 
 # T :: (A, $home_dir, $tmp_dir) -> (A, $r)
@@ -129,7 +144,7 @@ sub push_repo {
   my ($r, $res, $name) = map {pop} 1 .. 3;
 
   git($r, remote => add => heroku => $res->{git_url});
-  git($r, push => heroku => 'master');
+  git($r, push => '--force' => heroku => 'master');
 
   return @_, $r;
 }
@@ -138,16 +153,12 @@ sub git {
   return 1 if shift->run(@_);
 }
 
-sub is_repo {
-  return eval { Git::Repository->new(git_dir => pop . '/.git') };
-}
+# T :: (A, $opt, $h) -> (A, $res)
+sub create_or_get_app {
+  my ($h, $opt) = map {pop} 1..2;
 
-# T :: (A, $config, $h, $res) -> (A, $h, $res)
-sub create_app {
-  my $opt = pop;
-
-  my $h = Net::Heroku->new(api_key => $opt->{api_key});
   my $res = $h->create(name => $opt->{name});
+  $res = [$h->apps(name => $opt->{name})]->[0] if defined $res->{error};
 
   die "create failed for $opt->{name}" if !$res;
 
@@ -164,17 +175,17 @@ sub config_app {
   return @_, $h, $res;
 }
 
-# T :: (A, $h, $res) -> (A, $h, $res)
+# T :: (A, $h, $res) -> (A, $res)
 sub verify_app {
   my ($res, $h) = map {pop} 1 .. 2;
 
   for (0 .. 5) {
     last if $h->app_created(name => $res->{name});
     sleep 1;
-    print '.';
+    print ' . ';
   }
 
-  return @_, $h, $res;
+  return @_, $res;
 }
 
 
@@ -203,14 +214,14 @@ L<Mojo::Command> and implements the following new ones.
 =head2 C<description>
 
   my $description = $deployment->description;
-  $cpanify        = $deployment->description('Foo!');
+  $cpanify        = $deployment->description(' Foo !');
 
 Short description of this command, used for the command list.
 
 =head2 C<usage>
 
   my $usage = $deployment->usage;
-  $deployment  = $deployment->usage('Foo!');
+  $deployment  = $deployment->usage(' Foo !');
 
 Usage information for this command, used for the help screen.
 
