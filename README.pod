@@ -1,24 +1,3 @@
-package Mojolicious::Command::deploy;
-use Mojo::Base 'Mojolicious::Commands';
-
-has description => "Deploy Mojolicious apps to the cloud.\n";
-has hint        => <<"EOF";
-
-See '$0 deploy help DEPLOYMENT' for more information on a specific deployment.
-EOF
-has message => <<"EOF";
-usage: $0 deploy DEPLOYMENT [OPTIONS]
-
-These deployments are currently available:
-EOF
-has namespaces =>
-  sub { [qw/Mojolicious::Command::deploy Mojo::Command::deploy/] };
-has usage => "usage: $0 deploy DEPLOYMENT [OPTIONS]\n";
-
-1;
-
-__END__
-
 =head1 NAME
 
 Mojolicious::Command::deploy - Deployment command
@@ -80,4 +59,3 @@ L<Mojolicious::Commands>.
 
 L<Mojolicious>, L<Mojolicious::Guides>, L<http://mojolicio.us>.
 
-=cut
