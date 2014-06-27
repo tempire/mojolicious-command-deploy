@@ -1,3 +1,5 @@
+=pod
+
 =head1 NAME
 
 Mojolicious::Command::deploy - Deployment command
@@ -55,7 +57,12 @@ L<Mojolicious::Command::deploy> and L<Mojo::Command::deploy>.
 L<Mojolicious::Command::deploy> inherits all methods from
 L<Mojolicious::Commands>.
 
+=head1 CREDITS
+
+Chankey Pathak
+
 =head1 SEE ALSO
 
 L<Mojolicious>, L<Mojolicious::Guides>, L<http://mojolicio.us>.
 
+=cut
