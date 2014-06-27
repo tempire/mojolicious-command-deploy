@@ -3,7 +3,7 @@ use Mojo::Base 'Mojolicious::Commands';
 
 has description => "Deploy Mojolicious apps to the cloud.\n";
 has hint        => <<"EOF";
-
+our $VERSION = '1.0';
 See '$0 deploy help DEPLOYMENT' for more information on a specific deployment.
 EOF
 has message => <<"EOF";
